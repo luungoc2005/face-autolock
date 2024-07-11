@@ -16,7 +16,7 @@ current_frame_verified = False
 trained_face_embedding = None
 consecutive_failures = 0
 max_consecutive_failures = 3
-base_threshold = 0.68 # from https://github.com/serengil/deepface/blob/master/deepface/modules/verification.py
+base_threshold = 1.17 # from https://github.com/serengil/deepface/blob/master/deepface/modules/verification.py
 
 def euclidean_distance(embedding1, embedding2):
     if isinstance(embedding1, list):
@@ -37,12 +37,12 @@ def find_distance(embedding1, embedding2):
         embedding2 = np.array(embedding2)
     
     # return euclidean_distance(l2_normalize(embedding1), l2_normalize(embedding2))
-    # return euclidean_distance(embedding1, embedding2)
+    return euclidean_distance(embedding1, embedding2)
     # cosine distance
-    a = np.matmul(np.transpose(embedding1), embedding2)
-    b = np.sum(np.multiply(embedding1, embedding1))
-    c = np.sum(np.multiply(embedding2, embedding2))
-    return 1 - (a / (np.sqrt(b) * np.sqrt(c)))
+    # a = np.matmul(np.transpose(embedding1), embedding2)
+    # b = np.sum(np.multiply(embedding1, embedding1))
+    # c = np.sum(np.multiply(embedding2, embedding2))
+    # return 1 - (a / (np.sqrt(b) * np.sqrt(c)))
 
 def verify():
     global current_frame
@@ -66,13 +66,16 @@ def verify():
         emb = DeepFace.represent(face["face"], model_name='VGG-Face', detector_backend="skip", align=True, normalization="VGGFace")[0]
         # print('Face detected with confidence:', face["confidence"])
         
-        distance = find_distance(trained_face_embedding, emb["embedding"])
-        # print('Distance:', distance)
-        if distance <= base_threshold:
-            result = True
-            break
-        else:
-            print('Mismatching face. Distance:', distance)
+        min_distance = 1e9
+        for trained_emb in trained_face_embedding:
+            distance = find_distance(trained_emb["embedding"], emb["embedding"])
+            if distance < min_distance:
+                min_distance = distance
+            if distance <= base_threshold:
+                result = True
+                break
+        if not result:
+            print('Mismatching face. Distance:', min_distance)
     current_frame_verified = True
     return result
 
@@ -98,8 +101,9 @@ def on_press(key):
 
 if __name__ == '__main__':
     with open('face.json') as f:
-        face = json.load(f)
-        trained_face_embedding = np.array(face[0]["embedding"])
+        trained_face_embedding = json.load(f)
+        print(f'Found {len(trained_face_embedding)} trained embeddings')
+
     listener = keyboard.Listener(
         on_press=on_press)
     listener.start()
